@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Kanban PCM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen">
+    <div class="bg-white p-8 md:p-12 rounded-2xl shadow-xl w-full max-w-md">
+        <!-- Logo e Título -->
+        <div class="flex items-center space-x-3 mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-green-700" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4.5 12a7.5 7.5 0 0 0 15 0"/></svg>
+            <div>
+                <h1 class="text-2xl font-bold text-gray-800">Kanban Peças</h1>
+                <p class="text-sm text-gray-500 font-light">Cervejaria Heineken</p>
+            </div>
+        </div>
+
+        <form id="login-form">
+            <div class="space-y-5">
+                <div>
+                    <label for="email" class="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
+                    <input type="email" id="email" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500" placeholder="voce@email.com">
+                </div>
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Senha</label>
+                    <div class="relative">
+                        <input type="password" id="password" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500" placeholder="••••••••">
+                        <button type="button" id="toggle-password-btn" class="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-gray-600 hover:text-gray-800">Mostrar</button>
+                    </div>
+                </div>
+            </div>
+            
+            <p id="error-message" class="text-red-500 text-sm mt-4 text-center h-5"></p>
+
+            <div class="mt-6 space-y-3">
+                <button type="submit" id="login-btn" class="w-full px-6 py-3 rounded-lg bg-green-700 text-white font-semibold hover:bg-green-800 transition-colors">
+                    Entrar
+                </button>
+                <button type="button" id="register-btn" class="w-full px-6 py-3 rounded-lg bg-gray-200 text-gray-700 font-semibold hover:bg-gray-300 transition-colors">
+                    Registrar Nova Conta
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- 
+      ! IMPORTANTE! 
+      A CORREÇÃO ESTÁ AQUI: 
+      Scripts alterados para '...-compat.js' para funcionar com a sintaxe v8.
+    -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+
+    <script>
+        // --- 1. CONFIGURAÇÃO DO FIREBASE ---
+        // Configuração do Firebase (fornecida pelo usuário)
+        const firebaseConfig = {
+            apiKey: "AIzaSyBBrp0r27bdq0_Giw-OcefyGTgtNny2U_g",
+            authDomain: "gfyfy7fy.firebaseapp.com",
+            databaseURL: "https://gfyfy7fy-default-rtdb.firebaseio.com",
+            projectId: "gfyfy7fy",
+            storageBucket: "gfyfy7fy.firebasestorage.app",
+            messagingSenderId: "55023990965",
+            appId: "1:55023990965:web:227802c9e20ba07f6f26fc",
+            measurementId: "G-WK5QQDSC4Y"
+        };
+
+        // Inicializa o Firebase
+        const app = firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+
+        // --- 2. ELEMENTOS DO DOM ---
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const loginBtn = document.getElementById('login-btn');
+        const registerBtn = document.getElementById('register-btn');
+        const errorMessage = document.getElementById('error-message');
+
+        // --- 3. VERIFICAÇÃO DE SESSÃO ---
+        // Se o usuário já estiver logado, redireciona para o kanban
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                // Redireciona para a página principal
+                window.location.replace('index.html');
+            }
+        });
+
+        // --- 4. FUNÇÕES DE LOGIN E REGISTRO ---
+
+        // Função para traduzir erros do Firebase
+        function getFirebaseError(error) {
+            switch (error.code) {
+                case 'auth/user-not-found':
+                    return 'Usuário não encontrado.';
+                case 'auth/wrong-password':
+                    return 'Senha incorreta.';
+                case 'auth/invalid-email':
+                    return 'Formato de e-mail inválido.';
+                case 'auth/email-already-in-use':
+                    return 'Este e-mail já está em uso.';
+                case 'auth/weak-password':
+                    return 'Sua senha deve ter pelo menos 6 caracteres.';
+                default:
+                    return 'Ocorreu um erro. Tente novamente.';
+            }
+        }
+
+        // Função para reativar botões
+        function enableButtons() {
+            loginBtn.disabled = false;
+            registerBtn.disabled = false;
+            loginBtn.textContent = "Entrar";
+            registerBtn.textContent = "Registrar Nova Conta";
+        }
+
+        // Evento de Login (no submit do formulário)
+        document.getElementById('login-form').addEventListener('submit', (e) => {
+            e.preventDefault(); // Impede o recarregamento da página
+            errorMessage.textContent = '';
+            loginBtn.disabled = true;
+            registerBtn.disabled = true;
+            loginBtn.textContent = "Entrando...";
+
+            const email = emailInput.value;
+            const password = passwordInput.value;
+
+            auth.signInWithEmailAndPassword(email, password)
+                .then((userCredential) => {
+                    // Sucesso! O onAuthStateChanged fará o redirecionamento.
+                })
+                .catch((error) => {
+                    errorMessage.textContent = getFirebaseError(error);
+                    enableButtons();
+                });
+        });
+
+        // Evento de Registro
+        registerBtn.addEventListener('click', () => {
+            errorMessage.textContent = '';
+            loginBtn.disabled = true;
+            registerBtn.disabled = true;
+            registerBtn.textContent = "Registrando...";
+
+            const email = emailInput.value;
+            const password = passwordInput.value;
+
+            if (password.length < 6) {
+                 errorMessage.textContent = 'A senha deve ter pelo menos 6 caracteres.';
+                 enableButtons();
+                 return;
+            }
+
+            auth.createUserWithEmailAndPassword(email, password)
+                .then((userCredential) => {
+                    // Sucesso! O onAuthStateChanged fará o redirecionamento.
+                })
+                .catch((error) => {
+                    errorMessage.textContent = getFirebaseError(error);
+                    enableButtons();
+                });
+        });
+
+        // Mostrar / Ocultar senha
+        const pwdInput = document.getElementById('password');
+        const togglePwdBtn = document.getElementById('toggle-password-btn');
+        if (togglePwdBtn && pwdInput) {
+            togglePwdBtn.addEventListener('click', () => {
+                if (pwdInput.type === 'password') {
+                    pwdInput.type = 'text';
+                    togglePwdBtn.textContent = 'Ocultar';
+                } else {
+                    pwdInput.type = 'password';
+                    togglePwdBtn.textContent = 'Mostrar';
+                }
+            });
+        }
+
+    </script>
+</body>
+</html>

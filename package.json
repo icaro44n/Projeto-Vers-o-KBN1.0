@@ -1,0 +1,21 @@
+{
+  "name": "pj-kanban-auth",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "nodemailer": "^6.9.4",
+    "cors": "^2.8.5"
+  },
+  "env": {
+    "GMAIL_USER": "seu-email@gmail.com",
+    "GMAIL_PASS": "sua-app-password-ou-smtp-pass",
+    "GMAIL_FROM": "\"Seu Nome <seu-email@gmail.com>\"",
+    "PORT": 3000
+  }
+}
