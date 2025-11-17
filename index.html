@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kanban Peças - Heineken</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Sortable.js (Drag and Drop) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <!-- DOMPurify (Segurança) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+    <!-- Fonte -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .sortable-ghost { opacity: 0.3; background: #dbeafe; border: 2px dashed #60a5fa; }
+        .sortable-chosen { cursor: grabbing; opacity: 0.9; transform: scale(1.02); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+        .kanban-column-body { max-height: 75vh; overflow-y: auto; }
+    </style>
+</head>
+<body class="antialiased text-gray-900">
+
+    <!-- 
+      ========================================
+      PÁGINA DE LOGIN
+      (Será mostrada ou oculta via JavaScript)
+      ========================================
+    -->
+    <div id="login-page" class="flex items-center justify-center min-h-screen">
+        <div class="bg-white p-8 md:p-12 rounded-2xl shadow-xl w-full max-w-md">
+            <!-- Logo e Título -->
+            <div class="flex items-center space-x-3 mb-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-green-700" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4.5 12a7.5 7.5 0 0 0 15 0"/></svg>
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-800">Kanban Peças</h1>
+                    <p class="text-sm text-gray-500 font-light">Cervejaria Heineken</p>
+                </div>
+            </div>
+    
+            <form id="login-form">
+                <div class="space-y-5">
+                    <div>
+                        <label for="email" class="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
+                        <input type="email" id="email" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500" placeholder="voce@email.com">
+                    </div>
+                    <div>
+                        <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Senha</label>
+                        <div class="relative">
+                            <input type="password" id="password" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500" placeholder="••••••••">
+                            <button type="button" id="toggle-password-btn" class="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-gray-600 hover:text-gray-800">Mostrar</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <p id="error-message" class="text-red-500 text-sm mt-4 text-center h-5"></p>
+    
+                <div class="mt-6 space-y-3">
+                    <button type="submit" id="login-btn" class="w-full px-6 py-3 rounded-lg bg-green-700 text-white font-semibold hover:bg-green-800 transition-colors">
+                        Entrar
+                    </button>
+                    <button type="button" id="register-btn" class="w-full px-6 py-3 rounded-lg bg-gray-200 text-gray-700 font-semibold hover:bg-gray-300 transition-colors">
+                        Registrar Nova Conta
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 
+      ========================================
+      PÁGINA DO KANBAN (APP PRINCIPAL)
+      (Será oculta por defeito e mostrada após o login)
+      ========================================
+    -->
+    <div id="kanban-page" class="hidden">
+        <!-- Cabeçalho -->
+        <header class="bg-green-800 text-white shadow-lg sticky top-0 z-40">
+            <div class="container mx-auto max-w-full px-4 md:px-8 py-4 flex justify-between items-center">
+                <!-- Logo e Título -->
+                <div class="flex items-center space-x-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-green-300" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4.5 12a7.5 7.5 0 0 0 15 0"/></svg>
+                    <div class="flex items-center space-x-3">
+                        <div>
+                            <h1 class="text-2xl font-bold">Kanban Peças</h1>
+                            <p class="text-sm text-gray-200 font-light">Cervejaria Heineken</p>
+                        </div>
+                    </div>
+                </div>
+                <!-- Botões de Ação -->
+                <div class="flex items-center space-x-3">
+                    <div class="flex items-center space-x-2 mr-2">
+                        <label for="header-priority-select" class="text-sm font-medium sr-only">Prioridade Padrão</label>
+                        <select id="header-priority-select" class="px-3 py-2 rounded-lg bg-white text-gray-800 text-sm border border-green-600">
+                            <option value="all" selected>Todas</option>
+                            <option value="low">Baixa</option>
+                            <option value="medium">Média</option>
+                            <option value="high">Alta</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center space-x-2 mr-2">
+                        <span class="text-sm text-white font-medium">Prioridade</span>
+                        <span id="title-priority-badge" class="text-xs font-semibold px-2 py-1 rounded-full bg-orange-500 text-white">Média</span>
+                    </div>
+                    <button id="add-task-btn" class="bg-green-600 hover:bg-green-700 px-5 py-2 rounded-lg font-semibold transition-colors">Adicionar</button>
+                    <button id="logout-btn" class="bg-green-500 text-white px-3 py-2 rounded-lg border border-green-600 text-sm font-medium hover:bg-red-600 hover:border-red-700 transition-colors">Sair</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Barra de Status da Autenticação -->
+        <div id="auth-status" class="py-2 px-6 bg-green-900 text-green-200 text-sm text-center sticky top-[80px] z-30">A conectar...</div>
+
+        <!-- Corpo Principal do Kanban -->
+        <main id="kanban-board" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 p-6">
+            
+            <!-- Coluna 1: A RESTAURAR -->
+            <div class="kanban-column bg-white rounded-xl shadow-lg flex flex-col">
+                <div class="p-4 border-b border-gray-200 flex justify-between items-center sticky top-[124px] bg-white rounded-t-xl z-10">
+                    <div class="flex items-center space-x-3">
+                        <span class="w-3 h-3 bg-red-500 rounded-full"></span>
+                        <h3 class="font-semibold text-red-600 uppercase text-sm">A RESTAURAR</h3>
+                    </div>
+                    <span id="count-col-restaurar" class="px-2.5 py-0.5 bg-gray-200 text-gray-700 rounded-full font-semibold text-xs">0</span>
+                </div>
+                <div id="col-restaurar" class="p-4 space-y-4 kanban-column-body flex-grow min-h-[200px]" data-column-id="col-restaurar"></div>
+            </div>
+
+            <!-- Coluna 2: EM DIAGNÓSTICO -->
+            <div class="kanban-column bg-white rounded-xl shadow-lg flex flex-col">
+                <div class="p-4 border-b border-gray-200 flex justify-between items-center sticky top-[124px] bg-white rounded-t-xl z-10">
+                    <div class="flex items-center space-x-3">
+                        <span class="w-3 h-3 bg-yellow-500 rounded-full"></span>
+                        <h3 class="font-semibold text-yellow-600 uppercase text-sm">EM DIAGNÓSTICO</h3>
+                    </div>
+                    <span id="count-col-diagnostico" class="px-2.5 py-0.5 bg-gray-200 text-gray-700 rounded-full font-semibold text-xs">0</span>
+                </div>
+                <div id="col-diagnostico" class="p-4 space-y-4 kanban-column-body flex-grow min-h-[200px]" data-column-id="col-diagnostico"></div>
+            </div>
+
+            <!-- Coluna 3: EM RESTAURAÇÃO -->
+            <div class="kanban-column bg-white rounded-xl shadow-lg flex flex-col">
+                <div class="p-4 border-b border-gray-200 flex justify-between items-center sticky top-[124px] bg-white rounded-t-xl z-10">
+                    <div class="flex items-center space-x-3">
+                        <span class="w-3 h-3 bg-orange-500 rounded-full"></span>
+                        <h3 class="font-semibold text-orange-600 uppercase text-sm">EM RESTAURAÇÃO</h3>
+                    </div>
+                    <span id="count-col-restauracao" class="px-2.5 py-0.5 bg-gray-200 text-gray-700 rounded-full font-semibold text-xs">0</span>
+                </div>
+                <div id="col-restauracao" class="p-4 space-y-4 kanban-column-body flex-grow min-h-[200px]" data-column-id="col-restauracao"></div>
+            </div>
+
+            <!-- Coluna 4: EM TESTE / QUALIDADE -->
+            <div class="kanban-column bg-white rounded-xl shadow-lg flex flex-col">
+                <div class="p-4 border-b border-gray-200 flex justify-between items-center sticky top-[124px] bg-white rounded-t-xl z-10">
+                    <div class="flex items-center space-x-3">
+                        <span class="w-3 h-3 bg-blue-500 rounded-full"></span>
+                        <h3 class="font-semibold text-blue-600 uppercase text-sm">EM TESTE / QUALIDADE</h3>
+                    </div>
+                    <span id="count-col-teste" class="px-2.5 py-0.5 bg-gray-200 text-gray-700 rounded-full font-semibold text-xs">0</span>
+                </div>
+                <div id="col-teste" class="p-4 space-y-4 kanban-column-body flex-grow min-h-[200px]" data-column-id="col-teste"></div>
+            </div>
+
+            <!-- Coluna 5: PRONTO PARA USO -->
+            <div class="kanban-column bg-white rounded-xl shadow-lg flex flex-col">
+                <div class="p-4 border-b border-gray-200 flex justify-between items-center sticky top-[124px] bg-white rounded-t-xl z-10">
+                    <div class="flex items-center space-x-3">
+                        <span class="w-3 h-3 bg-green-500 rounded-full"></span>
+                        <h3 class="font-semibold text-green-600 uppercase text-sm">PRONTO PARA USO</h3>
+                    </div>
+                    <span id="count-col-pronto" class="px-2.5 py-0.5 bg-gray-200 text-gray-700 rounded-full font-semibold text-xs">0</span>
+                </div>
+                <div id="col-pronto" class="p-4 space-y-4 kanban-column-body flex-grow min-h-[200px]" data-column-id="col-pronto"></div>
+            </div>
+        </main>
+
+        <!-- Modal de Adicionar/Editar Tarefa -->
+        <div id="task-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 hidden">
+            <div class="bg-white rounded-lg shadow-2xl max-w-lg w-full transform scale-95 opacity-0" id="task-modal-content">
+                <form id="task-form">
+                    <div class="flex justify-between items-center p-5 border-b border-gray-200">
+                        <h4 id="modal-title" class="text-2xl font-semibold text-gray-800">Adicionar</h4>
+                        <button type="button" id="close-modal-btn" class="text-gray-400 hover:text-gray-600">✕</button>
+                    </div>
+                    <div class="p-6 space-y-5">
+                        <div>
+                            <label for="task-id-input" class="block text-sm font-medium text-gray-700 mb-1">Nº / Código (Obrigatório)</label>
+                            <input type="text" id="task-id-input" placeholder="Ex: OS-45102" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
+                            <p id="task-id-display" class="text-lg font-medium text-gray-600 hidden"></p>
+                        </div>
+                        <div>
+                            <label for="task-text-input" class="block text-sm font-medium text-gray-700 mb-1">Descrição do Serviço <span class="text-red-500">*</span></label>
+                            <textarea id="task-text-input" rows="4" placeholder="Descreva o serviço..." class="w-full px-4 py-2 border border-gray-300 rounded-lg" required></textarea>
+                        </div>
+                        <div>
+                            <label for="task-priority-input" class="block text-sm font-medium text-gray-700 mb-1">Prioridade</label>
+                            <select id="task-priority-input" class="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white">
+                                <option value="low">Baixa</option>
+                                <option value="medium" selected>Média</option>
+                                <option value="high">Alta</option>
+                            </select>
+                        </div>
+                        <input type="hidden" id="task-id-hidden">
+                        <p id="modal-error-message" class="text-red-500 text-sm h-5"></p>
+                    </div>
+                        <div class="flex justify-end items-center space-x-4 p-5 bg-gray-50 rounded-b-lg">
+                        <button type="button" id="cancel-modal-btn" class="px-5 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 transition-colors">Cancelar</button>
+                        <button type="submit" id="save-task-btn" class="px-6 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors">Salvar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Modal de Confirmação de Exclusão -->
+        <div id="delete-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 hidden">
+            <div class="bg-white p-6 rounded-lg shadow-2xl max-w-sm w-full transform scale-95 opacity-0" id="delete-modal-content">
+                <h4 class="text-xl font-semibold mb-4">Confirmar exclusão</h4>
+                <p class="text-gray-600 mb-6">Tem certeza de que deseja excluir este item?</p>
+                <div class="flex justify-end space-x-3">
+                    <button id="cancel-delete-btn" class="px-5 py-2 rounded-lg bg-gray-300 hover:bg-gray-400 transition-colors">Cancelar</button>
+                    <button id="confirm-delete-btn" class="px-5 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors">Excluir</button>
+                </div>
+            </div>
+        </div>
+    </div> <!-- Fim de #kanban-page -->
+
+
+    <!-- Scripts do Firebase (versão compat) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+    <!-- Script principal da aplicação -->
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        
+        // --- 1. CONFIGURAÇÃO DO FIREBASE ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBBrp0r27bdq0_Giw-OcefyGTgtNny2U_g",
+            authDomain: "gfyfy7fy.firebaseapp.com",
+            databaseURL: "https://gfyfy7fy-default-rtdb.firebaseio.com",
+            projectId: "gfyfy7fy",
+            storageBucket: "gfyfy7fy.firebasestorage.app",
+            messagingSenderId: "55023990965",
+            appId: "1:55023990965:web:227802c9e20ba07f6f26fc",
+            measurementId: "G-WK5QQDSC4Y"
+        };
+
+        // --- 2. INICIALIZAÇÃO DO FIREBASE ---
+        const app = firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.database();
+
+        // --- 3. VARIÁVEIS GLOBAIS E ESTADO ---
+        let currentUser = null;
+        let userUid = null;
+        let userRole = 'user'; 
+        let dbTasksRef = null; // Referência de LEITURA (pode ser filtrada)
+        let writeTasksRef = null; // Referência de ESCRITA (sempre no caminho principal)
+        let taskToDeleteId = null;
+        let unsubscribeSnapshot = null; // Função para parar de ouvir o DB
+        let unsubscribeRole = null; // Função para parar de ouvir a Função (role)
+
+        // --- 4. MAPEAMENTO DE ELEMENTOS DO DOM ---
+        
+        // -- Páginas
+        const loginPage = document.getElementById('login-page');
+        const kanbanPage = document.getElementById('kanban-page');
+
+        // -- Elementos de Login
+        const loginForm = document.getElementById('login-form');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const loginBtn = document.getElementById('login-btn');
+        const registerBtn = document.getElementById('register-btn');
+        const errorMessage = document.getElementById('error-message');
+        const togglePasswordBtn = document.getElementById('toggle-password-btn');
+
+        // -- Elementos do Kanban (Cabeçalho e Controlo)
+        const authStatus = document.getElementById('auth-status');
+        const logoutBtn = document.getElementById('logout-btn');
+        const addTaskBtn = document.getElementById('add-task-btn');
+        const headerPrioritySelect = document.getElementById('header-priority-select');
+        const titlePriorityBadge = document.getElementById('title-priority-badge');
+
+        // -- Colunas e Contadores do Kanban
+        const columns = {
+            "col-restaurar": document.getElementById('col-restaurar'),
+            "col-diagnostico": document.getElementById('col-diagnostico'),
+            "col-restauracao": document.getElementById('col-restauracao'),
+            "col-teste": document.getElementById('col-teste'),
+            "col-pronto": document.getElementById('col-pronto')
+        };
+        const columnIds = Object.keys(columns);
+        const columnCounts = {
+            "col-restaurar": document.getElementById('count-col-restaurar'),
+            "col-diagnostico": document.getElementById('count-col-diagnostico'),
+            "col-restauracao": document.getElementById('count-col-restauracao'),
+            "col-teste": document.getElementById('count-col-teste'),
+            "col-pronto": document.getElementById('count-col-pronto')
+        };
+
+        // -- Elementos dos Modais (Tarefa e Exclusão)
+        const taskModal = document.getElementById('task-modal');
+        const taskModalContent = document.getElementById('task-modal-content');
+        const taskForm = document.getElementById('task-form');
+        const modalTitle = document.getElementById('modal-title');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const cancelModalBtn = document.getElementById('cancel-modal-btn');
+        const saveTaskBtn = document.getElementById('save-task-btn');
+        const taskIdInput = document.getElementById('task-id-input');
+        const taskIdDisplay = document.getElementById('task-id-display');
+        const taskTextInput = document.getElementById('task-text-input');
+        const taskPriorityInput = document.getElementById('task-priority-input');
+        const taskIdHidden = document.getElementById('task-id-hidden');
+        const modalErrorMessage = document.getElementById('modal-error-message');
+        
+        const deleteModal = document.getElementById('delete-modal');
+        const deleteModalContent = document.getElementById('delete-modal-content');
+        const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
+        const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+
+        
+        // --- 5. LÓGICA DE AUTENTICAÇÃO E "ROUTER" ---
+
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                // --- UTILIZADOR AUTENTICADO ---
+                currentUser = user;
+                userUid = user.uid;
+                
+                // Limpa listeners antigos (se houver)
+                if (unsubscribeSnapshot) unsubscribeSnapshot();
+                if (unsubscribeRole) unsubscribeRole();
+
+                const userName = user.email.split('@')[0];
+                authStatus.textContent = `A verificar permissões...`;
+
+                // Mostra o Kanban, esconde o Login
+                kanbanPage.classList.remove('hidden');
+                loginPage.classList.add('hidden');
+
+                // Verifica a função (role) do utilizador
+                const userRoleRef = db.ref('user_roles/' + userUid);
+                unsubscribeRole = userRoleRef.on('value', (snap) => {
+                    if (snap.exists() && snap.val().role === 'admin') {
+                        userRole = 'admin';
+                        authStatus.textContent = `Conectado como: ${userName.charAt(0).toUpperCase() + userName.slice(1)} (ADMIN)`;
+                    } else {
+                        userRole = 'user';
+                        authStatus.textContent = `Conectado como: ${userName.charAt(0).toUpperCase() + userName.slice(1)} (Utilizador)`;
+                    }
+                    
+                    // Inicializa o Kanban SÓ DEPOIS de saber a função
+                    initializeKanbanForRole(userRole, userUid);
+                });
+
+            } else {
+                // --- UTILIZADOR DESLOGADO ---
+                currentUser = null;
+                userUid = null;
+                userRole = 'user'; // Resetar
+                
+                // Para de ouvir o banco de dados
+                if (unsubscribeSnapshot) unsubscribeSnapshot();
+                if (unsubscribeRole) unsubscribeRole();
+
+                // Mostra o Login, esconde o Kanban
+                kanbanPage.classList.add('hidden');
+                loginPage.classList.remove('hidden');
+
+                // Limpa o quadro (necessário se o utilizador fez logout)
+                columnIds.forEach(id => {
+                    if (columns[id]) columns[id].innerHTML = '';
+                });
+                updateAllCounts();
+            }
+        });
+
+        // Evento de Logout
+        logoutBtn.addEventListener('click', () => {
+            // Removido o 'confirm()' que bloqueava a execução
+            if (unsubscribeSnapshot) unsubscribeSnapshot();
+            if (unsubscribeRole) unsubscribeRole();
+            auth.signOut();
+        });
+
+        // --- 6. LÓGICA DE LOGIN (Formulário) ---
+
+        // Função para traduzir erros do Firebase
+        function getFirebaseError(error) {
+            switch (error.code) {
+                case 'auth/user-not-found': return 'Usuário não encontrado.';
+                case 'auth/wrong-password': return 'Senha incorreta.';
+                case 'auth/invalid-email': return 'Formato de e-mail inválido.';
+                case 'auth/email-already-in-use': return 'Este e-mail já está em uso.';
+                case 'auth/weak-password': return 'Sua senha deve ter pelo menos 6 caracteres.';
+                default: return 'Ocorreu um erro. Tente novamente.';
+            }
+        }
+
+        // Função para reativar botões de login
+        function enableLoginButtons() {
+            loginBtn.disabled = false;
+            registerBtn.disabled = false;
+            loginBtn.textContent = "Entrar";
+            registerBtn.textContent = "Registrar Nova Conta";
+        }
+
+        // Evento de Login (Submit)
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault(); 
+            errorMessage.textContent = '';
+            loginBtn.disabled = true;
+            registerBtn.disabled = true;
+            loginBtn.textContent = "Entrando...";
+
+            const email = emailInput.value;
+            const password = passwordInput.value;
+
+            auth.signInWithEmailAndPassword(email, password)
+                .then((userCredential) => {
+                    // Sucesso! O onAuthStateChanged tratará do resto.
+                    enableLoginButtons(); // Reativa caso o user volte
+                })
+                .catch((error) => {
+                    errorMessage.textContent = getFirebaseError(error);
+                    enableLoginButtons();
+                });
+        });
+
+        // Evento de Registro (Click)
+        registerBtn.addEventListener('click', () => {
+            errorMessage.textContent = '';
+            loginBtn.disabled = true;
+            registerBtn.disabled = true;
+            registerBtn.textContent = "Registrando...";
+
+            const email = emailInput.value;
+            const password = passwordInput.value;
+
+            if (password.length < 6) {
+                 errorMessage.textContent = 'A senha deve ter pelo menos 6 caracteres.';
+                 enableLoginButtons();
+                 return;
+            }
+
+            auth.createUserWithEmailAndPassword(email, password)
+                .then((userCredential) => {
+                    // Sucesso!
+                    const user = userCredential.user;
+                    if (user) {
+                        // Define a função (role) do utilizador na base de dados
+                        const userRoleRef = db.ref('user_roles/' + user.uid);
+                        userRoleRef.set({
+                            role: 'user', // Define novos utilizadores como 'user'
+                            email: user.email
+                        }).then(() => {
+                            console.log('Função de utilizador definida como "user".');
+                            // O onAuthStateChanged tratará do resto.
+                        }).catch((dbError) => {
+                            console.error("Erro ao definir a função do utilizador:", dbError);
+                            errorMessage.textContent = "Erro ao configurar a conta, mas o login foi feito.";
+                        });
+                    }
+                })
+                .catch((error) => {
+                    errorMessage.textContent = getFirebaseError(error);
+                    enableLoginButtons();
+                });
+        });
+
+        // Mostrar / Ocultar senha
+        if (togglePasswordBtn && passwordInput) {
+            togglePasswordBtn.addEventListener('click', () => {
+                if (passwordInput.type === 'password') {
+                    passwordInput.type = 'text';
+                    togglePasswordBtn.textContent = 'Ocultar';
+                } else {
+                    passwordInput.type = 'password';
+                    togglePasswordBtn.textContent = 'Mostrar';
+                }
+            });
+        }
+
+
+        // --- 7. LÓGICA DO BANCO DE DADOS (Kanban) ---
+
+        function initializeKanbanForRole(role, uid) {
+            if (unsubscribeSnapshot) unsubscribeSnapshot(); 
+            
+            const publicTasksPath = 'public_tasks';
+            
+            // Referência de ESCRITA é sempre a principal
+            writeTasksRef = db.ref(publicTasksPath);
+
+            // Referência de LEITURA depende da função
+            if (role === 'admin') {
+                dbTasksRef = writeTasksRef; // Admin vê tudo
+            } else {
+                // User vê apenas o que criou
+                dbTasksRef = writeTasksRef.orderByChild('createdBy').equalTo(uid);
+            }
+
+            initRealtimeListener();
+            initSortable(role); 
+        }
+
+
+        function initRealtimeListener() {
+            if (!dbTasksRef) return;
+
+            columnIds.forEach(id => columns[id].innerHTML = '');
+
+            // Handlers
+            const onChildAdded = (snap) => {
+                const task = snap.val();
+                const taskId = snap.key;
+                if (!task) return;
+                
+                const cardExists = document.querySelector(`[data-task-id="${taskId}"]`);
+                if (cardExists) return; 
+                
+                const newCard = createTaskElement(task, taskId);
+                const colId = task.column || 'col-restaurar';
+                if (columns[colId]) columns[colId].appendChild(newCard);
+                
+                applyPriorityFilter();
+                updateAllCounts();
+            };
+
+            const onChildChanged = (snap) => {
+                const task = snap.val();
+                const taskId = snap.key;
+                if (!task) return;
+                
+                const cardToUpdate = document.querySelector(`[data-task-id="${taskId}"]`);
+                const newColId = task.column || 'col-restaurar';
+                const updatedCard = createTaskElement(task, taskId); 
+
+                if (cardToUpdate) {
+                    if (cardToUpdate.parentElement.dataset.columnId !== newColId) {
+                        if (columns[newColId]) {
+                            columns[newColId].appendChild(updatedCard);
+                        }
+                        cardToUpdate.remove();
+                    } else {
+                        cardToUpdate.replaceWith(updatedCard);
+                    }
+                } else if (columns[newColId]) {
+                    columns[newColId].appendChild(updatedCard);
+                }
+                
+                applyPriorityFilter();
+                updateAllCounts();
+            };
+
+            const onChildRemoved = (snap) => {
+                const taskId = snap.key;
+                const existingCard = document.querySelector(`[data-task-id="${taskId}"]`);
+                if (existingCard) existingCard.remove();
+                
+                applyPriorityFilter();
+                updateAllCounts();
+            };
+
+            // Registra os listeners
+            dbTasksRef.on('child_added', onChildAdded);
+            dbTasksRef.on('child_changed', onChildChanged);
+            dbTasksRef.on('child_removed', onChildRemoved);
+
+            // Função para remover os listeners
+            unsubscribeSnapshot = () => {
+                if (dbTasksRef) {
+                    dbTasksRef.off('child_added', onChildAdded);
+                    dbTasksRef.off('child_changed', onChildChanged);
+                    dbTasksRef.off('child_removed', onChildRemoved);
+                }
+            };
+        }
+
+        
+        function updateAllCounts() {
+            columnIds.forEach(colId => {
+                if (!columns[colId]) return;
+                const count = Array.from(columns[colId].children).filter(c => !c.classList.contains('hidden')).length;
+                columnCounts[colId].textContent = count;
+            });
+        }
+
+        
+        function applyPriorityFilter(){
+            const val = headerPrioritySelect ? headerPrioritySelect.value : null;
+            if (!val) return;
+            
+            const cards = document.querySelectorAll('.task-card');
+            cards.forEach(card => {
+                if (val === 'all') {
+                    card.classList.remove('hidden');
+                } 
+                else if (card.dataset.priority && card.dataset.priority !== val) {
+                    card.classList.add('hidden');
+                } 
+                else {
+                    card.classList.remove('hidden');
+                }
+            });
+            updateAllCounts();
+        }
+
+        // --- 8. RENDERIZAÇÃO E MODAIS ---
+        
+        function showModal(modal, content){ 
+            modal.classList.remove('hidden'); 
+            setTimeout(()=>{ 
+                modal.classList.add('opacity-100'); 
+                content.classList.add('scale-100','opacity-100'); 
+                content.classList.remove('scale-95','opacity-0'); 
+            }, 10);
+        }
+
+        function hideModal(modal, content){ 
+            content.classList.remove('scale-100','opacity-100'); 
+            content.classList.add('scale-95','opacity-0'); 
+            modal.classList.remove('opacity-100'); 
+            setTimeout(()=> modal.classList.add('hidden'), 200); 
+        }
+
+        async function openTaskModal(mode = 'add', taskId = null){
+            modalErrorMessage.textContent = '';
+            taskForm.reset();
+            
+            taskPriorityInput.value = 'medium'; // Padrão
+            
+            saveTaskBtn.disabled = false;
+            saveTaskBtn.textContent = "Salvar";
+
+            if (mode === 'add') {
+                modalTitle.textContent = 'Adicionar';
+                taskIdHidden.value = '';
+                taskIdInput.value = `OS-${Math.floor(10000 + Math.random() * 90000)}`;
+                taskIdInput.classList.remove('hidden');
+                taskIdInput.disabled = false;
+                taskIdDisplay.classList.add('hidden');
+            } else if (mode === 'edit' && taskId) {
+                if (userRole !== 'admin') {
+                    console.warn("Utilizador tentou editar, mas não é admin.");
+                    return; 
+                }
+
+                try {
+                    const snap = await writeTasksRef.child(taskId).once('value'); 
+                    if (!snap.exists()) {
+                        alert("Erro: Tarefa não encontrada.");
+                        return;
+                    }
+                    const task = snap.val();
+
+                    modalTitle.textContent = 'Editar';
+                    taskIdHidden.value = taskId; 
+                    taskIdInput.classList.add('hidden');
+                    taskIdInput.disabled = true;
+                    taskIdDisplay.textContent = `ID: ${task.idOS || task.id}`; 
+                    taskIdDisplay.classList.remove('hidden');
+                    taskTextInput.value = task.text;
+                    taskPriorityInput.value = task.priority || 'medium';
+
+                } catch(err) {
+                    alert("Erro ao carregar tarefa: " + err.message);
+                    return;
+                }
+            }
+            
+            showModal(taskModal, taskModalContent);
+            setTimeout(()=> taskTextInput.focus(), 150);
+        }
+
+        function closeTaskModal(){ 
+            hideModal(taskModal, taskModalContent); 
+        }
+
+        function showDeleteModal(id){ 
+            taskToDeleteId = id; 
+            confirmDeleteBtn.disabled = false;
+            showModal(deleteModal, deleteModalContent); 
+        }
+
+        function hideDeleteModal(){ 
+            hideModal(deleteModal, deleteModalContent); 
+            taskToDeleteId = null; 
+        }
+
+        function getPriorityClasses(priority){
+            if (priority === 'high') return { border:'border-red-500', text:'Alta', bg:'bg-red-500' };
+            if (priority === 'medium') return { border:'border-orange-500', text:'Média', bg:'bg-orange-500' };
+            if (priority === 'low') return { border:'border-blue-500', text:'Baixa', bg:'bg-blue-500' };
+            return { border:'border-gray-400', text:'Todas', bg:'bg-gray-500' };
+        }
+
+        function updatePriorityBadges(){
+            if (!headerPrioritySelect) return;
+            const val = headerPrioritySelect.value;
+            const p = getPriorityClasses(val);
+            if (titlePriorityBadge) {
+                titlePriorityBadge.textContent = p.text;
+                titlePriorityBadge.className = `text-xs font-semibold px-2 py-1 rounded-full ${p.bg} text-white`;
+            }
+        }
+        headerPrioritySelect.addEventListener('change', () => { 
+            updatePriorityBadges(); 
+            applyPriorityFilter(); 
+        });
+        updatePriorityBadges();
+        applyPriorityFilter();
+
+        function createTaskElement(task, taskId){
+            const p = getPriorityClasses(task.priority);
+            const idSan = DOMPurify.sanitize(task.idOS || task.id || '');
+            const textSan = DOMPurify.sanitize(task.text);
+            const emailSan = DOMPurify.sanitize(task.owner_email || 'N/A'); 
+            
+            const card = document.createElement('div');
+            card.className = `task-card bg-white p-4 rounded-lg shadow-md border-l-4 ${p.border} group relative ${userRole === 'admin' ? 'cursor-move' : 'cursor-default'}`;
+            card.dataset.taskId = taskId || task.id;
+            card.dataset.priority = task.priority || 'medium';
+            
+            card.innerHTML = `
+                <p class="text-sm font-semibold text-gray-500">${idSan}</p>
+                <p class="text-gray-800 mt-1.5 font-medium task-text">${textSan}</p>
+                <p class="text-xs text-gray-400 mt-2 pt-2 border-t border-gray-100">Solicitado por: ${emailSan}</p>
+                <div class="flex justify-between items-center mt-3">
+                    <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${p.bg} text-white">${p.text}</span>
+                </div>
+                <button class="delete-task-btn ${userRole === 'admin' ? '' : 'hidden'} absolute top-2 right-2 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity" aria-label="Encerrar OS">✕</button>
+            `;
+            
+            if (userRole === 'admin') {
+                card.addEventListener('click', () => openTaskModal('edit', card.dataset.taskId));
+            }
+            
+            card.querySelector('.delete-task-btn').addEventListener('click', (e)=>{ 
+                e.stopPropagation(); 
+                showDeleteModal(card.dataset.taskId); 
+            });
+            
+            return card;
+        }
+
+        // --- 9. EVENT LISTENERS PRINCIPAIS ---
+
+        taskForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            modalErrorMessage.textContent = '';
+            saveTaskBtn.disabled = true;
+            saveTaskBtn.textContent = "Salvando...";
+
+            const text = taskTextInput.value.trim();
+            const priority = taskPriorityInput.value;
+            const editingId = taskIdHidden.value; 
+
+            if (!text) { 
+                modalErrorMessage.textContent = 'A descrição é obrigatória.'; 
+                saveTaskBtn.disabled = false;
+                saveTaskBtn.textContent = "Salvar";
+                return; 
+            }
+
+            try {
+                if (editingId) {
+                    // MODO EDIÇÃO (UPDATE)
+                    await writeTasksRef.child(editingId).update({
+                        text: text,
+                        priority: priority
+                    });
+                } else {
+                    // MODO ADIÇÃO (PUSH)
+                    const idOS = taskIdInput.value.trim().toUpperCase(); 
+                    if (!idOS) { 
+                        modalErrorMessage.textContent = 'Nº / Código é obrigatório.'; 
+                        saveTaskBtn.disabled = false;
+                        saveTaskBtn.textContent = "Salvar";
+                        return; 
+                    }
+
+                    const newTask = {
+                        idOS: idOS,
+                        text: text,
+                        priority: priority,
+                        column: 'col-restaurar', 
+                        createdBy: userUid, 
+                        owner_email: currentUser.email 
+                    };
+
+                    // *** CORREÇÃO: Usar 'writeTasksRef' para verificar duplicados ***
+                    const existsSnap = await writeTasksRef.orderByChild('idOS').equalTo(idOS).once('value');
+                    if (existsSnap.exists()) {
+                        modalErrorMessage.textContent = 'Este número já existe.';
+                        saveTaskBtn.disabled = false;
+                        saveTaskBtn.textContent = "Salvar";
+                        return;
+                    }
+
+                    const newRef = writeTasksRef.push(); 
+                    await newRef.set(newTask);
+                }
+                
+                closeTaskModal();
+            } catch (err) {
+                 modalErrorMessage.textContent = 'Erro ao salvar: ' + err.message;
+                 saveTaskBtn.disabled = false;
+                 saveTaskBtn.textContent = "Salvar";
+            }
+        });
+
+        confirmDeleteBtn.addEventListener('click', async () => {
+            if (taskToDeleteId) {
+                if (userRole !== 'admin') {
+                    alert("Apenas administradores podem excluir tarefas.");
+                    return;
+                }
+
+                confirmDeleteBtn.disabled = true;
+                try {
+                    await writeTasksRef.child(taskToDeleteId).remove(); 
+                    hideDeleteModal();
+                } catch (err) {
+                    alert("Erro ao excluir: " + err.message);
+                    confirmDeleteBtn.disabled = false;
+                }
+            }
+        });
+
+        cancelDeleteBtn.addEventListener('click', hideDeleteModal);
+        closeModalBtn.addEventListener('click', closeTaskModal);
+        cancelModalBtn.addEventListener('click', closeTaskModal);
+        taskModal.addEventListener('click', (e) => { if (e.target === taskModal) closeTaskModal(); });
+        deleteModal.addEventListener('click', (e) => { if (e.target === deleteModal) hideDeleteModal(); });
+        addTaskBtn.addEventListener('click', () => openTaskModal('add'));
+
+        // --- 10. INICIALIZAÇÃO DO DRAG & DROP ---
+
+        function initSortable(role){ 
+            columnIds.forEach(colId => {
+                const el = columns[colId]; 
+                if (!el) return; 
+                
+                new Sortable(el, { 
+                    group: 'kanban',
+                    animation: 150,
+                    ghostClass: 'sortable-ghost',
+                    chosenClass: 'sortable-chosen',
+                    disabled: (role !== 'admin'), 
+                    
+                    onEnd: (evt) => {
+                        if (userRole !== 'admin') return; 
+
+                        const taskId = evt.item.dataset.taskId;
+                        const newCol = evt.to.dataset.columnId;
+                        const oldCol = evt.from.dataset.columnId;
+
+                        if (newCol === oldCol) return; 
+                        
+                        writeTasksRef.child(taskId).update({ column: newCol }) 
+                        .catch(err => {
+                            alert("Erro ao mover card. Revertendo.");
+                            evt.from.appendChild(evt.item);
+                        });
+                        
+                        updateAllCounts();
+                    }
+                });
+            });
+        }
+        
+    });
+    </script>
+</body>
+</html>
