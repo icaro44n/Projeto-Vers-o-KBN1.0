@@ -204,9 +204,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 2. VARIÁVEIS GLOBAIS E ESTADO ---
     let currentUser = null;
     let userUid = null;
-    let dbTasksRef = null; // Referência do nó de tarefas (Realtime DB)
+    let userRole = 'user'; // ADICIONADO: Função do utilizador (padrão 'user')
+    let dbTasksRef = null; // Referência de LEITURA (pode ser filtrada)
+    let writeTasksRef = null; // ADICIONADO: Referência de ESCRITA (sempre no caminho principal)
     let taskToDeleteId = null;
     let unsubscribeSnapshot = null; // Função para parar de ouvir o DB
+    let unsubscribeRole = null; // ADICIONADO: Função para parar de ouvir a Função (role)
 
     // --- 3. MAPEAMENTO DE ELEMENTOS DO DOM ---
     const authStatus = document.getElementById('auth-status');
@@ -259,24 +262,40 @@ document.addEventListener('DOMContentLoaded', () => {
             currentUser = user;
             userUid = user.uid;
             
-            // Define a referência do nó: /users/{userId}/tasks
-            // Remove listeners antigos (se houver)
-            if (dbTasksRef && unsubscribeSnapshot) {
-                unsubscribeSnapshot();
-            }
-            dbTasksRef = db.ref('users/' + userUid + '/tasks');
-            
+            // Limpa listeners antigos (se houver)
+            if (unsubscribeSnapshot) unsubscribeSnapshot();
+            if (unsubscribeRole) unsubscribeRole();
+
             const userName = user.email.split('@')[0];
-            authStatus.textContent = `Conectado como: ${userName.charAt(0).toUpperCase() + userName.slice(1)}`;
-            
-            // Inicializa o quadro e o "ouvinte" do Realtime Database
-            initRealtimeListener();
-            initSortable();
+            authStatus.textContent = `A verificar permissões...`;
+
+            // --- LÓGICA DE FUNÇÃO (ROLE) ADICIONADA ---
+            // 1. Ouve a função (role) do utilizador
+            const userRoleRef = db.ref('user_roles/' + userUid);
+            unsubscribeRole = userRoleRef.on('value', (snap) => {
+                if (snap.exists() && snap.val().role === 'admin') {
+                    userRole = 'admin';
+                    authStatus.textContent = `Conectado como: ${userName.charAt(0).toUpperCase() + userName.slice(1)} (ADMIN)`;
+                } else {
+                    userRole = 'user';
+                    authStatus.textContent = `Conectado como: ${userName.charAt(0).toUpperCase() + userName.slice(1)} (Utilizador)`;
+                }
+                
+                // 2. Inicializa o Kanban SÓ DEPOIS de saber a função
+                initializeKanbanForRole(userRole, userUid);
+            });
+
 
         } else {
             // Usuário não está logado
             currentUser = null;
             userUid = null;
+            userRole = 'user'; // Resetar
+            
+            // Para de ouvir o banco de dados
+            if (unsubscribeSnapshot) unsubscribeSnapshot();
+            if (unsubscribeRole) unsubscribeRole();
+
             // Redireciona para a página de login
             window.location.replace('login.html');
         }
@@ -286,14 +305,41 @@ document.addEventListener('DOMContentLoaded', () => {
     logoutBtn.addEventListener('click', () => {
         if (confirm('Deseja sair?')) {
             // Para de ouvir o banco de dados antes de sair
-            if (unsubscribeSnapshot) {
-                unsubscribeSnapshot();
-            }
+            if (unsubscribeSnapshot) unsubscribeSnapshot();
+            if (unsubscribeRole) unsubscribeRole();
             auth.signOut();
         }
     });
 
     // --- 5. LÓGICA DO BANCO DE DADOS (Realtime Database) ---
+
+    /**
+     * Define as referências de LEITURA e ESCRITA e inicia os listeners
+     * com base na função (role) do utilizador.
+     */
+    function initializeKanbanForRole(role, uid) {
+        if (unsubscribeSnapshot) unsubscribeSnapshot(); // Limpa listeners antigos
+        
+        // Define o caminho público para as tarefas
+        const publicTasksPath = 'public_tasks';
+        
+        // A Referência de ESCRITA é sempre a principal (sem filtros)
+        writeTasksRef = db.ref(publicTasksPath);
+
+        // A Referência de LEITURA (dbTasksRef) depende da função
+        if (role === 'admin') {
+            // Admin vê tudo
+            dbTasksRef = writeTasksRef;
+        } else {
+            // User vê apenas o que criou
+            dbTasksRef = writeTasksRef.orderByChild('createdBy').equalTo(uid);
+        }
+
+        // Inicializa o quadro (com as permissões corretas)
+        initRealtimeListener();
+        initSortable(role); // Passa a função para o Sortable
+    }
+
 
     function initRealtimeListener() {
         if (!dbTasksRef) return;
@@ -306,8 +352,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const task = snap.val();
             const taskId = snap.key;
             if (!task) return;
-            const existingCard = document.querySelector(`[data-task-id="${taskId}"]`);
-            if (existingCard) return; // evita duplicatas
+            // *** CORREÇÃO: Renomeada a variável para evitar conflito ***
+            const cardExists = document.querySelector(`[data-task-id="${taskId}"]`);
+            if (cardExists) return; // evita duplicatas
                 const newCard = createTaskElement(task, taskId);
             const colId = task.column || 'col-restaurar';
             if (columns[colId]) columns[colId].appendChild(newCard);
@@ -321,16 +368,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const task = snap.val();
             const taskId = snap.key;
             if (!task) return;
-            const existingCard = document.querySelector(`[data-task-id="${taskId}"]`);
+            // *** CORREÇÃO: Renomeada a variável para evitar conflito ***
+            const cardToUpdate = document.querySelector(`[data-task-id="${taskId}"]`);
             const newColId = task.column || 'col-restaurar';
-            const updatedCard = createTaskElement(task, taskId);
+            const updatedCard = createTaskElement(task, taskId); // <-- Passa o taskId
 
-            if (existingCard) {
-                if (existingCard.parentElement.dataset.columnId !== newColId) {
+            if (cardToUpdate) {
+                if (cardToUpdate.parentElement.dataset.columnId !== newColId) {
                     columns[newColId].appendChild(updatedCard);
-                    existingCard.remove();
+                    cardToUpdate.remove();
                 } else {
-                    existingCard.replaceWith(updatedCard);
+                    cardToUpdate.replaceWith(updatedCard);
                 }
             } else if (columns[newColId]) {
                 columns[newColId].appendChild(updatedCard);
@@ -379,14 +427,25 @@ document.addEventListener('DOMContentLoaded', () => {
     function applyPriorityFilter(){
         const val = headerPrioritySelect ? headerPrioritySelect.value : null;
         if (!val) return;
+        
+        // *** CORREÇÃO LÓGICA DO FILTRO ***
         const cards = document.querySelectorAll('.task-card');
         cards.forEach(card => {
-            if (card.dataset.priority && card.dataset.priority !== val) {
+            // Se "Todas" for selecionado, remove 'hidden' de todos
+            if (val === 'all') {
+                card.classList.remove('hidden');
+            } 
+            // Se o cartão tiver uma prioridade e ELA FOR DIFERENTE da selecionada, esconde.
+            else if (card.dataset.priority && card.dataset.priority !== val) {
                 card.classList.add('hidden');
-            } else {
+            } 
+            // Caso contrário (é "Todas" ou a prioridade bate certo), mostra.
+            else {
                 card.classList.remove('hidden');
             }
         });
+        // Atualiza a contagem DEPOIS de filtrar
+        updateAllCounts();
     }
 
     // --- 6. RENDERIZAÇÃO E MODAIS (Funções Auxiliares) ---
@@ -411,7 +470,11 @@ document.addEventListener('DOMContentLoaded', () => {
     async function openTaskModal(mode = 'add', taskId = null){
         modalErrorMessage.textContent = '';
         taskForm.reset();
-        taskPriorityInput.value = headerPrioritySelect.value;
+        
+        // --- MODIFICADO: Define prioridade 'medium' por defeito, não a do filtro ---
+        taskPriorityInput.value = 'medium'; 
+        // O filtro (headerPrioritySelect) é só para filtrar, não para definir
+        
         saveTaskBtn.disabled = false;
         saveTaskBtn.textContent = "Salvar";
 
@@ -423,10 +486,17 @@ document.addEventListener('DOMContentLoaded', () => {
             taskIdInput.disabled = false;
             taskIdDisplay.classList.add('hidden');
         } else if (mode === 'edit' && taskId) {
+            // --- MODIFICADO: Só Admin pode editar ---
+            if (userRole !== 'admin') {
+                // Removemos o 'alert' para uma experiência mais suave
+                console.warn("Utilizador tentou editar, mas não é admin.");
+                return; // Simplesmente não abre o modal de edição
+            }
+
             // No modo de edição, buscamos os dados direto do Realtime DB
-            // para garantir que estão atualizados
             try {
-                const snap = await dbTasksRef.child(taskId).once('value');
+                // --- MODIFICADO: Usa writeTasksRef para garantir que pode ler a tarefa (caso seja admin vendo tarefa de user) ---
+                const snap = await writeTasksRef.child(taskId).once('value'); 
                 if (!snap.exists()) {
                     alert("Erro: Tarefa não encontrada.");
                     return;
@@ -487,7 +557,11 @@ document.addEventListener('DOMContentLoaded', () => {
             titlePriorityBadge.className = `text-xs font-semibold px-2 py-1 rounded-full ${p.bg} text-white`;
         }
     }
-    headerPrioritySelect.addEventListener('change', () => { updatePriorityBadges(); applyPriorityFilter(); });
+    headerPrioritySelect.addEventListener('change', () => { 
+        // *** CORREÇÃO: Atualiza o badge PRIMEIRO, depois aplica o filtro ***
+        updatePriorityBadges(); 
+        applyPriorityFilter(); 
+    });
     // Inicializa o badge com o valor atual e aplica filtro padrão
     updatePriorityBadges();
     applyPriorityFilter();
@@ -495,30 +569,36 @@ document.addEventListener('DOMContentLoaded', () => {
     // Criação do Elemento Card
     function createTaskElement(task, taskId){
         const p = getPriorityClasses(task.priority);
-        // Sanitização é boa prática, embora o Firebase já nos proteja de injeção
+        // Sanitização é boa prática
         const idSan = DOMPurify.sanitize(task.idOS || task.id || '');
         const textSan = DOMPurify.sanitize(task.text);
+        const emailSan = DOMPurify.sanitize(task.owner_email || 'N/A'); // <-- ADICIONADO: Email do dono
         
         const card = document.createElement('div');
-        card.className = `task-card bg-white p-4 rounded-lg shadow-md border-l-4 ${p.border} cursor-move group relative`;
-    // dataset.taskId deve ser a chave do nó no Realtime DB
-    card.dataset.taskId = taskId || task.id;
-    // Armazena a prioridade também para facilitar o filtro
-    card.dataset.priority = task.priority || 'medium';
+        // --- MODIFICADO: Cursor só é 'move' se for admin ---
+        card.className = `task-card bg-white p-4 rounded-lg shadow-md border-l-4 ${p.border} group relative ${userRole === 'admin' ? 'cursor-move' : 'cursor-default'}`;
+        // dataset.taskId deve ser a chave do nó no Realtime DB
+        card.dataset.taskId = taskId || task.id;
+        // Armazena a prioridade também para facilitar o filtro
+        card.dataset.priority = task.priority || 'medium';
         
         card.innerHTML = `
             <p class="text-sm font-semibold text-gray-500">${idSan}</p>
             <p class="text-gray-800 mt-1.5 font-medium task-text">${textSan}</p>
-            <div class="flex justify-between items-center mt-3 pt-3 border-t border-gray-100">
+            <p class="text-xs text-gray-400 mt-2 pt-2 border-t border-gray-100">Solicitado por: ${emailSan}</p> <!-- <-- ADICIONADO -->
+            <div class="flex justify-between items-center mt-3">
                 <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${p.bg} text-white">${p.text}</span>
             </div>
-            <button class="delete-task-btn absolute top-2 right-2 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity" aria-label="Encerrar OS">✕</button>
+            <!-- MODIFICADO: Botão de apagar só aparece para admin -->
+            <button class="delete-task-btn ${userRole === 'admin' ? '' : 'hidden'} absolute top-2 right-2 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity" aria-label="Encerrar OS">✕</button>
         `;
         
-        // O evento de clique AGORA abre o modal de edição
-    card.addEventListener('click', () => openTaskModal('edit', card.dataset.taskId));
+        // --- MODIFICADO: Evento de clique SÓ para admin ---
+        if (userRole === 'admin') {
+            card.addEventListener('click', () => openTaskModal('edit', card.dataset.taskId));
+        }
         
-        // O evento do botão de excluir
+        // O evento do botão de excluir (já tem a classe 'hidden' se não for admin)
         card.querySelector('.delete-task-btn').addEventListener('click', (e)=>{ 
             e.stopPropagation(); // Impede que o clique abra o modal de edição
             showDeleteModal(card.dataset.taskId); 
@@ -550,9 +630,11 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             if (editingId) {
                 // --- MODO EDIÇÃO (UPDATE) ---
-                await dbTasksRef.child(editingId).update({
+                // (Já verificámos no openTaskModal que só admin pode editar)
+                await writeTasksRef.child(editingId).update({ // <-- MODIFICADO para writeTasksRef
                     text: text,
                     priority: priority
+                    // Adms podem editar mais campos aqui se necessário
                 });
             } else {
                 // --- MODO ADIÇÃO (PUSH) ---
@@ -569,10 +651,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     idOS: idOS,
                     text: text,
                     priority: priority,
-                    column: 'col-restaurar' // Sempre começa na primeira coluna
+                    column: 'col-restaurar', // Sempre começa na primeira coluna
+                    createdBy: userUid, // <-- ADICIONADO
+                    owner_email: currentUser.email // <-- ADICIONADO
                 };
 
                 // Verifica se já existe uma tarefa com o mesmo idOS
+                // (Verificação agora usa a referência de LEITURA correta, seja admin ou user)
                 const existsSnap = await dbTasksRef.orderByChild('idOS').equalTo(idOS).once('value');
                 if (existsSnap.exists()) {
                     modalErrorMessage.textContent = 'Este número já existe.';
@@ -582,7 +667,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 // Usa push() para gerar uma chave única e salvar idOS dentro do objeto
-                const newRef = dbTasksRef.push();
+                const newRef = writeTasksRef.push(); // <-- MODIFICADO para writeTasksRef
                 await newRef.set(newTask);
             }
             
@@ -599,9 +684,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // Evento de Exclusão (MODIFICADO PARA FIREBASE)
     confirmDeleteBtn.addEventListener('click', async () => {
         if (taskToDeleteId) {
+            // --- MODIFICADO: Verificação de Admin ---
+            if (userRole !== 'admin') {
+                alert("Apenas administradores podem excluir tarefas.");
+                return;
+            }
+
             confirmDeleteBtn.disabled = true;
             try {
-                await dbTasksRef.child(taskToDeleteId).remove();
+                await writeTasksRef.child(taskToDeleteId).remove(); // <-- MODIFICADO para writeTasksRef
                 hideDeleteModal();
                 // Não precisa renderizar, os eventos child_removed cuidarão disso
             } catch (err) {
@@ -621,16 +712,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- 8. INICIALIZAÇÃO DO DRAG & DROP (Sortable.js) ---
 
-    function initSortable(){
+    function initSortable(role){ // <-- MODIFICADO: Recebe a função (role)
         columnIds.forEach(colId => {
-            new Sortable(columns[colId], {
+            const el = columns[colId]; // <-- Adicionada esta linha que faltava
+            if (!el) return; // <-- Adicionada esta verificação
+            
+            new Sortable(el, { // <-- Modificado de columns[colId] para el
                 group: 'kanban',
                 animation: 150,
                 ghostClass: 'sortable-ghost',
                 chosenClass: 'sortable-chosen',
+                disabled: (role !== 'admin'), // <-- MODIFICADO: Desabilita se não for admin
                 
                 // Evento ao soltar o card (MODIFICADO PARA FIREBASE)
                 onEnd: (evt) => {
+                    // --- MODIFICADO: Verificação de Admin ---
+                    if (userRole !== 'admin') return; 
+
                     const taskId = evt.item.dataset.taskId;
                     const newCol = evt.to.dataset.columnId;
                     const oldCol = evt.from.dataset.columnId;
@@ -638,7 +736,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (newCol === oldCol) return; // Não faz nada se for a mesma coluna
                     
                     // Atualiza apenas a coluna no banco de dados
-                    dbTasksRef.child(taskId).update({ column: newCol })
+                    writeTasksRef.child(taskId).update({ column: newCol }) // <-- MODIFICADO para writeTasksRef
                     .catch(err => {
                         alert("Erro ao mover card. Revertendo.");
                         // Reverte o movimento visualmente (opcional, mas bom)
