@@ -257,17 +257,19 @@
         let currentUser = null;
         let userUid = null;
         let userRole = 'user'; 
-        let dbTasksRef = null; 
-        let writeTasksRef = null; 
+        let dbTasksRef = null; // Referência de LEITURA (pode ser filtrada)
+        let writeTasksRef = null; // Referência de ESCRITA (sempre no caminho principal)
         let taskToDeleteId = null;
-        let unsubscribeSnapshot = null; 
-        let unsubscribeRole = null; 
+        let unsubscribeSnapshot = null; // Função para parar de ouvir o DB
+        let unsubscribeRole = null; // Função para parar de ouvir a Função (role)
 
         // --- 4. MAPEAMENTO DE ELEMENTOS DO DOM ---
         
+        // -- Páginas
         const loginPage = document.getElementById('login-page');
         const kanbanPage = document.getElementById('kanban-page');
 
+        // -- Elementos de Login
         const loginForm = document.getElementById('login-form');
         const emailInput = document.getElementById('email');
         const passwordInput = document.getElementById('password');
@@ -276,12 +278,14 @@
         const errorMessage = document.getElementById('error-message');
         const togglePasswordBtn = document.getElementById('toggle-password-btn');
 
+        // -- Elementos do Kanban (Cabeçalho e Controlo)
         const authStatus = document.getElementById('auth-status');
         const logoutBtn = document.getElementById('logout-btn');
         const addTaskBtn = document.getElementById('add-task-btn');
         const headerPrioritySelect = document.getElementById('header-priority-select');
         const titlePriorityBadge = document.getElementById('title-priority-badge');
 
+        // -- Colunas e Contadores do Kanban
         const columns = {
             "col-restaurar": document.getElementById('col-restaurar'),
             "col-diagnostico": document.getElementById('col-diagnostico'),
@@ -298,6 +302,7 @@
             "col-pronto": document.getElementById('count-col-pronto')
         };
 
+        // -- Elementos dos Modais (Tarefa e Exclusão)
         const taskModal = document.getElementById('task-modal');
         const taskModalContent = document.getElementById('task-modal-content');
         const taskForm = document.getElementById('task-form');
@@ -337,6 +342,7 @@
 
                 const userRoleRef = db.ref('user_roles/' + userUid);
                 unsubscribeRole = userRoleRef.on('value', (snap) => {
+                    // CORREÇÃO: Havia um 'Z' perdido aqui
                     if (snap.exists() && snap.val().role === 'admin') {
                         userRole = 'admin';
                         authStatus.textContent = `Conectado como: ${userName.charAt(0).toUpperCase() + userName.slice(1)} (ADMIN)`;
@@ -435,7 +441,6 @@
                 .then((userCredential) => {
                     const user = userCredential.user;
                     if (user) {
-                        // *** CORREÇÃO: Removido 'D' extra ***
                         const userRoleRef = db.ref('user_roles/' + user.uid); 
                         userRoleRef.set({
                             role: 'user', 
