@@ -102,7 +102,8 @@
                         <span class="text-sm text-white font-medium">Prioridade</span>
                         <span id="title-priority-badge" class="text-xs font-semibold px-2 py-1 rounded-full bg-orange-500 text-white">Média</span>
                     </div>
-                    <button id="add-task-btn" class="bg-green-600 hover:bg-green-700 px-5 py-2 rounded-lg font-semibold transition-colors">Adicionar</button>
+                    <!-- Botão Adicionar desativado por defeito para evitar 'race condition' -->
+                    <button id="add-task-btn" class="bg-green-600 hover:bg-green-700 px-5 py-2 rounded-lg font-semibold transition-colors disabled:opacity-50" disabled>Adicionar</button>
                     <button id="logout-btn" class="bg-green-500 text-white px-3 py-2 rounded-lg border border-green-600 text-sm font-medium hover:bg-red-600 hover:border-red-700 transition-colors">Sair</button>
                 </div>
             </div>
@@ -256,19 +257,17 @@
         let currentUser = null;
         let userUid = null;
         let userRole = 'user'; 
-        let dbTasksRef = null; // Referência de LEITURA (pode ser filtrada)
-        let writeTasksRef = null; // Referência de ESCRITA (sempre no caminho principal)
+        let dbTasksRef = null; 
+        let writeTasksRef = null; 
         let taskToDeleteId = null;
-        let unsubscribeSnapshot = null; // Função para parar de ouvir o DB
-        let unsubscribeRole = null; // Função para parar de ouvir a Função (role)
+        let unsubscribeSnapshot = null; 
+        let unsubscribeRole = null; 
 
         // --- 4. MAPEAMENTO DE ELEMENTOS DO DOM ---
         
-        // -- Páginas
         const loginPage = document.getElementById('login-page');
         const kanbanPage = document.getElementById('kanban-page');
 
-        // -- Elementos de Login
         const loginForm = document.getElementById('login-form');
         const emailInput = document.getElementById('email');
         const passwordInput = document.getElementById('password');
@@ -277,14 +276,12 @@
         const errorMessage = document.getElementById('error-message');
         const togglePasswordBtn = document.getElementById('toggle-password-btn');
 
-        // -- Elementos do Kanban (Cabeçalho e Controlo)
         const authStatus = document.getElementById('auth-status');
         const logoutBtn = document.getElementById('logout-btn');
         const addTaskBtn = document.getElementById('add-task-btn');
         const headerPrioritySelect = document.getElementById('header-priority-select');
         const titlePriorityBadge = document.getElementById('title-priority-badge');
 
-        // -- Colunas e Contadores do Kanban
         const columns = {
             "col-restaurar": document.getElementById('col-restaurar'),
             "col-diagnostico": document.getElementById('col-diagnostico'),
@@ -301,7 +298,6 @@
             "col-pronto": document.getElementById('count-col-pronto')
         };
 
-        // -- Elementos dos Modais (Tarefa e Exclusão)
         const taskModal = document.getElementById('task-modal');
         const taskModalContent = document.getElementById('task-modal-content');
         const taskForm = document.getElementById('task-form');
@@ -330,18 +326,15 @@
                 currentUser = user;
                 userUid = user.uid;
                 
-                // Limpa listeners antigos (se houver)
                 if (unsubscribeSnapshot) unsubscribeSnapshot();
                 if (unsubscribeRole) unsubscribeRole();
 
                 const userName = user.email.split('@')[0];
                 authStatus.textContent = `A verificar permissões...`;
 
-                // Mostra o Kanban, esconde o Login
                 kanbanPage.classList.remove('hidden');
                 loginPage.classList.add('hidden');
 
-                // Verifica a função (role) do utilizador
                 const userRoleRef = db.ref('user_roles/' + userUid);
                 unsubscribeRole = userRoleRef.on('value', (snap) => {
                     if (snap.exists() && snap.val().role === 'admin') {
@@ -352,25 +345,24 @@
                         authStatus.textContent = `Conectado como: ${userName.charAt(0).toUpperCase() + userName.slice(1)} (Utilizador)`;
                     }
                     
-                    // Inicializa o Kanban SÓ DEPOIS de saber a função
                     initializeKanbanForRole(userRole, userUid);
+                    // Ativa o botão "Adicionar"
+                    addTaskBtn.disabled = false;
                 });
 
             } else {
                 // --- UTILIZADOR DESLOGADO ---
                 currentUser = null;
                 userUid = null;
-                userRole = 'user'; // Resetar
+                userRole = 'user'; 
                 
-                // Para de ouvir o banco de dados
                 if (unsubscribeSnapshot) unsubscribeSnapshot();
                 if (unsubscribeRole) unsubscribeRole();
 
-                // Mostra o Login, esconde o Kanban
                 kanbanPage.classList.add('hidden');
                 loginPage.classList.remove('hidden');
+                addTaskBtn.disabled = true;
 
-                // Limpa o quadro (necessário se o utilizador fez logout)
                 columnIds.forEach(id => {
                     if (columns[id]) columns[id].innerHTML = '';
                 });
@@ -378,9 +370,7 @@
             }
         });
 
-        // Evento de Logout
         logoutBtn.addEventListener('click', () => {
-            // Removido o 'confirm()' que bloqueava a execução
             if (unsubscribeSnapshot) unsubscribeSnapshot();
             if (unsubscribeRole) unsubscribeRole();
             auth.signOut();
@@ -388,7 +378,6 @@
 
         // --- 6. LÓGICA DE LOGIN (Formulário) ---
 
-        // Função para traduzir erros do Firebase
         function getFirebaseError(error) {
             switch (error.code) {
                 case 'auth/user-not-found': return 'Usuário não encontrado.';
@@ -400,7 +389,6 @@
             }
         }
 
-        // Função para reativar botões de login
         function enableLoginButtons() {
             loginBtn.disabled = false;
             registerBtn.disabled = false;
@@ -408,7 +396,6 @@
             registerBtn.textContent = "Registrar Nova Conta";
         }
 
-        // Evento de Login (Submit)
         loginForm.addEventListener('submit', (e) => {
             e.preventDefault(); 
             errorMessage.textContent = '';
@@ -421,8 +408,7 @@
 
             auth.signInWithEmailAndPassword(email, password)
                 .then((userCredential) => {
-                    // Sucesso! O onAuthStateChanged tratará do resto.
-                    enableLoginButtons(); // Reativa caso o user volte
+                    enableLoginButtons();
                 })
                 .catch((error) => {
                     errorMessage.textContent = getFirebaseError(error);
@@ -430,7 +416,6 @@
                 });
         });
 
-        // Evento de Registro (Click)
         registerBtn.addEventListener('click', () => {
             errorMessage.textContent = '';
             loginBtn.disabled = true;
@@ -448,17 +433,15 @@
 
             auth.createUserWithEmailAndPassword(email, password)
                 .then((userCredential) => {
-                    // Sucesso!
                     const user = userCredential.user;
                     if (user) {
-                        // Define a função (role) do utilizador na base de dados
-                        const userRoleRef = db.ref('user_roles/' + user.uid);
+                        // *** CORREÇÃO: Removido 'D' extra ***
+                        const userRoleRef = db.ref('user_roles/' + user.uid); 
                         userRoleRef.set({
-                            role: 'user', // Define novos utilizadores como 'user'
+                            role: 'user', 
                             email: user.email
                         }).then(() => {
                             console.log('Função de utilizador definida como "user".');
-                            // O onAuthStateChanged tratará do resto.
                         }).catch((dbError) => {
                             console.error("Erro ao definir a função do utilizador:", dbError);
                             errorMessage.textContent = "Erro ao configurar a conta, mas o login foi feito.";
@@ -471,7 +454,6 @@
                 });
         });
 
-        // Mostrar / Ocultar senha
         if (togglePasswordBtn && passwordInput) {
             togglePasswordBtn.addEventListener('click', () => {
                 if (passwordInput.type === 'password') {
@@ -492,14 +474,11 @@
             
             const publicTasksPath = 'public_tasks';
             
-            // Referência de ESCRITA é sempre a principal
             writeTasksRef = db.ref(publicTasksPath);
 
-            // Referência de LEITURA depende da função
             if (role === 'admin') {
-                dbTasksRef = writeTasksRef; // Admin vê tudo
+                dbTasksRef = writeTasksRef;
             } else {
-                // User vê apenas o que criou
                 dbTasksRef = writeTasksRef.orderByChild('createdBy').equalTo(uid);
             }
 
@@ -792,7 +771,6 @@
                         owner_email: currentUser.email 
                     };
 
-                    // *** CORREÇÃO: Usar 'writeTasksRef' para verificar duplicados ***
                     const existsSnap = await writeTasksRef.orderByChild('idOS').equalTo(idOS).once('value');
                     if (existsSnap.exists()) {
                         modalErrorMessage.textContent = 'Este número já existe.';
