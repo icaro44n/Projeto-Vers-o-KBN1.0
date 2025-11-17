@@ -303,12 +303,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Evento de Logout
     logoutBtn.addEventListener('click', () => {
-        if (confirm('Deseja sair?')) {
-            // Para de ouvir o banco de dados antes de sair
-            if (unsubscribeSnapshot) unsubscribeSnapshot();
-            if (unsubscribeRole) unsubscribeRole();
-            auth.signOut();
-        }
+        // REMOVIDO: if (confirm('Deseja sair?')) {
+        // A confirmação foi removida porque 'confirm()' não funciona
+        // de forma fiável em todos os ambientes (como iFrames).
+
+        // Para de ouvir o banco de dados antes de sair
+        if (unsubscribeSnapshot) unsubscribeSnapshot();
+        if (unsubscribeRole) unsubscribeRole();
+        auth.signOut();
+        
+        // REMOVIDO: }
     });
 
     // --- 5. LÓGICA DO BANCO DE DADOS (Realtime Database) ---
