@@ -53,9 +53,11 @@
       ! IMPORTANTE! 
       A CORREÇÃO ESTÁ AQUI: 
       Scripts alterados para '...-compat.js' para funcionar com a sintaxe v8.
+      ADICIONADO: firebase-database-compat.js
     -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 
     <script>
         // --- 1. CONFIGURAÇÃO DO FIREBASE ---
@@ -74,6 +76,7 @@
         // Inicializa o Firebase
         const app = firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
+        const db = firebase.database(); // <-- ADICIONADO: Referência da Base de Dados
 
         // --- 2. ELEMENTOS DO DOM ---
         const emailInput = document.getElementById('email');
@@ -159,6 +162,27 @@
             auth.createUserWithEmailAndPassword(email, password)
                 .then((userCredential) => {
                     // Sucesso! O onAuthStateChanged fará o redirecionamento.
+                    
+                    // --- ADICIONADO: Definir a função (role) do utilizador na base de dados ---
+                    const user = userCredential.user;
+                    if (user) {
+                        const userRoleRef = db.ref('user_roles/' + user.uid);
+                        // Define o novo utilizador como 'user' por defeito
+                        userRoleRef.set({
+                            role: 'user',
+                            email: user.email
+                        }).then(() => {
+                            // A re-direcionamento será tratada pelo listener onAuthStateChanged
+                            // que está na página index.html (para onde esta vai).
+                            console.log('Função de utilizador definida como "user".');
+                        }).catch((dbError) => {
+                            // Mesmo que a função falhe, o login foi feito.
+                            console.error("Erro ao definir a função do utilizador:", dbError);
+                            errorMessage.textContent = "Erro ao configurar a conta, mas o login foi feito.";
+                        });
+                    }
+                    // --- FIM DA ADIÇÃO ---
+
                 })
                 .catch((error) => {
                     errorMessage.textContent = getFirebaseError(error);
