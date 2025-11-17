@@ -90,7 +90,7 @@
         auth.onAuthStateChanged(user => {
             if (user) {
                 // Redireciona para a página principal
-                window.location.replace('index.html');
+                window.location.href = './index.html'; // <-- CORRIGIDO
             }
         });
 
